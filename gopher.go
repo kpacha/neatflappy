@@ -34,7 +34,7 @@ func (g *Gopher) score() int {
 	if (x - pipeStartOffsetX) <= 0 {
 		return 0
 	}
-	return 100*floorDiv(x-pipeStartOffsetX, pipeIntervalX) + g.x16/1600
+	return 10*floorDiv(x-pipeStartOffsetX, pipeIntervalX) + g.x16/1600
 }
 
 func (g *Gopher) jump(in []int) bool {
