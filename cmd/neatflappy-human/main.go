@@ -39,7 +39,7 @@ func main() {
 		cancel()
 	}()
 
-	if err := ebiten.Run(g.Update(ctx), neatflappy.ScreenWidth, neatflappy.ScreenHeight, 1, "Flappy Gopher (Ebiten Demo)"); err != nil {
+	if err := ebiten.Run(g.Update(ctx), neatflappy.ScreenWidth, neatflappy.ScreenHeight, 1, "Flappy Gopher (Human Edition)"); err != nil {
 		panic(err)
 	}
 }
