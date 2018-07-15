@@ -141,13 +141,16 @@ type Game struct {
 	Fitness chan int
 
 	iteration int
+
+	speedFactor int
 }
 
-func NewGame() *Game {
+func NewGame(speedFactor int) *Game {
 	g := &Game{
-		Gopher:  &Gopher{},
-		Jumper:  make(chan Jumper),
-		Fitness: make(chan int),
+		Gopher:      &Gopher{},
+		Jumper:      make(chan Jumper),
+		Fitness:     make(chan int),
+		speedFactor: speedFactor,
 	}
 	g.init()
 	return g
@@ -233,17 +236,17 @@ func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 
 func (g *Game) update() bool {
 	shloudJump := g.Gopher.jump(g.scan())
-	g.Gopher.x16 += 32
-	g.cameraX += 2
+	g.Gopher.x16 += 32 * g.speedFactor
+	g.cameraX += 2 * g.speedFactor
 	if shloudJump {
 		g.Gopher.vy16 = -96
 		jumpPlayer.Rewind()
 		jumpPlayer.Play()
 	}
-	g.Gopher.y16 += g.Gopher.vy16
+	g.Gopher.y16 += (g.Gopher.vy16 + 2*g.speedFactor) * g.speedFactor
 
 	// Gravity
-	g.Gopher.vy16 += 4
+	g.Gopher.vy16 += 4 * g.speedFactor
 	if g.Gopher.vy16 > 96 {
 		g.Gopher.vy16 = 96
 	}
