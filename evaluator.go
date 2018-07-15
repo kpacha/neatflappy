@@ -22,7 +22,6 @@ func (e Evaluator) Evaluate(p evo.Phenome) (r evo.Result, err error) {
 
 	f := <-e.Fitness
 
-	log.Println(p.ID, f)
 	return evo.Result{
 		ID:      p.ID,
 		Fitness: float64(f),

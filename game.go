@@ -181,6 +181,12 @@ func jump() bool {
 
 func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 	return func(screen *ebiten.Image) error {
+		if inpututil.IsKeyJustPressed(ebiten.KeyUp) {
+			g.speedFactor++
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyDown) && g.speedFactor > 1 {
+			g.speedFactor--
+		}
 		switch g.mode {
 		case ModeSetup:
 			select {
@@ -195,8 +201,8 @@ func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 
 		case ModeGame:
 			if g.update() {
-				hitPlayer.Rewind()
-				hitPlayer.Play()
+				// hitPlayer.Rewind()
+				// hitPlayer.Play()
 				f := g.Gopher.score()
 				g.Fitness <- f
 				if f > 1000 {
@@ -229,7 +235,10 @@ func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 
 		scoreStr := fmt.Sprintf("%04d", g.Gopher.score())
 		text.Draw(screen, scoreStr, arcadeFont, ScreenWidth-len(scoreStr)*fontSize, fontSize, color.White)
-		ebitenutil.DebugPrint(screen, fmt.Sprintf("FPS: %0.2f. Gopher: %s", ebiten.CurrentFPS(), g.Gopher.Name))
+		ebitenutil.DebugPrint(
+			screen,
+			fmt.Sprintf("Speed: %dx. FPS: %0.2f. Gopher: %s", g.speedFactor, ebiten.CurrentFPS(), g.Gopher.Name),
+		)
 		return nil
 	}
 }
@@ -240,8 +249,8 @@ func (g *Game) update() bool {
 	g.cameraX += 2 * g.speedFactor
 	if shloudJump {
 		g.Gopher.vy16 = -96
-		jumpPlayer.Rewind()
-		jumpPlayer.Play()
+		// jumpPlayer.Rewind()
+		// jumpPlayer.Play()
 	}
 	g.Gopher.y16 += (g.Gopher.vy16 + 2*g.speedFactor) * g.speedFactor
 
