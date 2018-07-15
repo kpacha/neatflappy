@@ -71,6 +71,7 @@ func main() {
 	if runtime.GOARCH == "js" {
 		ebiten.SetFullscreen(true)
 	}
+	ebiten.SetRunnableInBackground(true)
 	if err := ebiten.Run(g.Update(ctx), neatflappy.ScreenWidth, neatflappy.ScreenHeight, 1, "Flappy Gopher (Ebiten Demo)"); err != nil {
 		panic(err)
 	}
