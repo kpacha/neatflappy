@@ -14,6 +14,7 @@ import (
 	"github.com/klokare/evo/config/source"
 	"github.com/klokare/evo/neat"
 	"github.com/kpacha/neatflappy"
+	"github.com/kpacha/neatflappy/bolt"
 )
 
 func init() {
@@ -21,14 +22,21 @@ func init() {
 }
 
 func main() {
-
 	// Parse the command-line flags
 	var (
-		iter        = flag.Int("iterations", 100, "number of iterations for experiment")
+		iter        = flag.Int("iterations", 150, "number of iterations for experiment")
 		speedFactor = flag.Int("speed", 100, "speed factor")
 		cpath       = flag.String("config", "neatflappy.json", "path to the configuration file")
 	)
 	flag.Parse()
+
+	client, err := bolt.New()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer client.Close()
+
+	boltWatcher := bolt.Evo{client}
 
 	g := neatflappy.NewGame(*speedFactor)
 
@@ -44,6 +52,7 @@ func main() {
 	exp := neat.NewExperiment(cfg)
 	exp.AddSubscription(evo.Subscription{Event: evo.Completed, Callback: neatflappy.ShowBest})
 	exp.AddSubscription(evo.Subscription{Event: evo.Evaluated, Callback: neatflappy.ShowBest})
+	exp.AddSubscription(evo.Subscription{Event: evo.Evaluated, Callback: boltWatcher.StoreBest})
 	// Run the experiment for a set number of iterations
 	ctx, fn, cb := evo.WithIterations(context.Background(), *iter)
 	defer fn() // ensure the context cancels
@@ -72,7 +81,7 @@ func main() {
 		ebiten.SetFullscreen(true)
 	}
 	ebiten.SetRunnableInBackground(true)
-	if err := ebiten.Run(g.Update(ctx), neatflappy.ScreenWidth, neatflappy.ScreenHeight, 1, "Flappy Gopher (Ebiten Demo)"); err != nil {
+	if err := ebiten.Run(g.Update(ctx), neatflappy.ScreenWidth, neatflappy.ScreenHeight, 1, "Flappy Gopher (NEAT edition)"); err != nil {
 		panic(err)
 	}
 }
