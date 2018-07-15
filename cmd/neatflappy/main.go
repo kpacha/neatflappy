@@ -43,6 +43,7 @@ func main() {
 	})}
 	exp := neat.NewExperiment(cfg)
 	exp.AddSubscription(evo.Subscription{Event: evo.Completed, Callback: neatflappy.ShowBest})
+	exp.AddSubscription(evo.Subscription{Event: evo.Evaluated, Callback: neatflappy.ShowBest})
 	// Run the experiment for a set number of iterations
 	ctx, fn, cb := evo.WithIterations(context.Background(), *iter)
 	defer fn() // ensure the context cancels
