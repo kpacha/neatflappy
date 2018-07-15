@@ -39,21 +39,29 @@ func (g *Gopher) score() int {
 
 func (g *Gopher) jump(in []int) bool {
 	offset := len(in)
-	input := make([]int, offset+2)
-	copy(input, in)
-	input[offset] = g.y16 / 16
-	input[offset+1] = g.vy16 / 16
+	input := make([]float64, offset*6+2)
+	for i := range input {
+		input[i] = -1
+	}
+	for i, k := range in {
+		if k == 0 {
+			continue
+		}
+		input[i*6+(k-2)] = 1
+	}
+	input[offset*6] = (float64(g.y16) / 16) / 300
+	input[offset*6+1] = float64(g.vy16) / 96
 
 	return g.jumper.Jump(input)
 }
 
 type Jumper interface {
-	Jump([]int) bool
+	Jump([]float64) bool
 }
 
 type InteractiveJumper int
 
-func (InteractiveJumper) Jump(_ []int) bool {
+func (InteractiveJumper) Jump(_ []float64) bool {
 	return jump()
 }
 
@@ -61,7 +69,7 @@ type InteractiveLogJumper struct {
 	Out io.Writer
 }
 
-func (i InteractiveLogJumper) Jump(in []int) bool {
+func (i InteractiveLogJumper) Jump(in []float64) bool {
 	out := jump()
 	data := Trace{
 		In:  in,
@@ -74,6 +82,6 @@ func (i InteractiveLogJumper) Jump(in []int) bool {
 }
 
 type Trace struct {
-	In  []int
+	In  []float64
 	Out bool
 }

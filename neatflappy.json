@@ -2,7 +2,7 @@
 	"disable-sort-check": true,
 	"neat": {
 		"comparison":                    "fitness",
-		"num-inputs":                    16,
+		"num-inputs":                    86,
 		"num-outputs":                   1,
 		"hidden-activation":             "steepened-sigmoid",
 		"output-activation":             "steepened-sigmoid",
@@ -13,7 +13,7 @@
 		"max-bias":                      8.0,
 		"mutate-only-probability":       0.25,
 		"interspecies-mate-probability": 0.001,
-		"elitism":                       0.01,
+		"elitism":                       0.02,
 		"survival-rate":                 0.2,
 		"enable-probability":            0.25,
 		"conns-coefficient":             1.0,

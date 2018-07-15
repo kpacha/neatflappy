@@ -237,7 +237,7 @@ func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 		text.Draw(screen, scoreStr, arcadeFont, ScreenWidth-len(scoreStr)*fontSize, fontSize, color.White)
 		ebitenutil.DebugPrint(
 			screen,
-			fmt.Sprintf("Speed: %d%. FPS: %0.2f. Gopher: %s", g.speedFactor, ebiten.CurrentFPS(), g.Gopher.Name),
+			fmt.Sprintf("Speed: %d%%. FPS: %0.2f. Gopher: %s", g.speedFactor, ebiten.CurrentFPS(), g.Gopher.Name),
 		)
 		return nil
 	}

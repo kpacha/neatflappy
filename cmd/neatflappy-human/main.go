@@ -17,7 +17,7 @@ func init() {
 }
 
 func main() {
-	g := neatflappy.NewGame(1)
+	g := neatflappy.NewGame(100)
 	if runtime.GOARCH == "js" {
 		ebiten.SetFullscreen(true)
 	}

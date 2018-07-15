@@ -33,11 +33,7 @@ type evoJumper struct {
 	p evo.Phenome
 }
 
-func (e *evoJumper) Jump(data []int) bool {
-	input := make([]float64, len(data))
-	for i, d := range data {
-		input[i] = float64(d)
-	}
+func (e *evoJumper) Jump(input []float64) bool {
 	in := mat.NewDense(1, len(input), input)
 	outputs, err := e.p.Activate(in)
 	if err != nil {
