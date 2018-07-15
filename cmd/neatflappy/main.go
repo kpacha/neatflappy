@@ -25,7 +25,7 @@ func main() {
 	// Parse the command-line flags
 	var (
 		iter        = flag.Int("iterations", 100, "number of iterations for experiment")
-		speedFactor = flag.Int("speed", 1, "speed factor")
+		speedFactor = flag.Int("speed", 100, "speed factor")
 		cpath       = flag.String("config", "neatflappy.json", "path to the configuration file")
 	)
 	flag.Parse()
