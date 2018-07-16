@@ -40,17 +40,14 @@ func (g *Gopher) score() int {
 func (g *Gopher) jump(in []int) bool {
 	offset := len(in)
 	input := make([]float64, offset*6+2)
-	for i := range input {
-		input[i] = -1
-	}
 	for i, k := range in {
 		if k == 0 {
 			continue
 		}
 		input[i*6+(k-2)] = 1
 	}
-	input[offset*6] = (float64(g.y16) / 16) / 300
-	input[offset*6+1] = float64(g.vy16) / 96
+	input[offset*6] = (float64(g.y16)/16 + 300) / 600
+	input[offset*6+1] = (float64(g.vy16) + 96) / 192
 
 	return g.jumper.Jump(input)
 }
