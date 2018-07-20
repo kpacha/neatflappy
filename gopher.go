@@ -11,6 +11,10 @@ const (
 	gopherHeight = 60
 )
 
+func NewGopher() *Gopher {
+	return &Gopher{fitness: make(chan float64)}
+}
+
 type Gopher struct {
 	Name string
 	// The gopher's position
@@ -18,7 +22,13 @@ type Gopher struct {
 	y16  int
 	vy16 int
 
-	jumper Jumper
+	successes int
+	jumps     int
+
+	jumper  Jumper
+	fitness chan float64
+
+	isDead bool
 }
 
 func (g *Gopher) init() {
@@ -27,27 +37,26 @@ func (g *Gopher) init() {
 	if g.jumper == nil {
 		g.jumper = new(InteractiveJumper)
 	}
+	g.isDead = false
+	g.jumps = 0
 }
 
-func (g *Gopher) score() int {
-	x := floorDiv(g.x16, 16) / tileSize
-	if (x - pipeStartOffsetX) <= 0 {
-		return 0
-	}
-	return 10*floorDiv(x-pipeStartOffsetX, pipeIntervalX) + g.x16/1600
+func (g *Gopher) score() float64 {
+	distance := float64(g.x16) / 1600
+	extra := float64(2+g.successes) / float64(g.jumps+1)
+	return (distance*distance + extra*extra*extra) / 2
 }
 
 func (g *Gopher) jump(in []int) bool {
 	offset := len(in)
-	input := make([]float64, offset*6+2)
-	for i, k := range in {
-		if k == 0 {
-			continue
-		}
-		input[i*6+(k-2)] = 1
+	input := make([]float64, offset+3)
+	for i := 0; i < offset/2; i++ {
+		input[2*i] = float64(in[2*i]-4) / 8
+		input[2*i+1] = float64(in[2*i+1]-4) / 8
 	}
-	input[offset*6] = (float64(g.y16)/16 + 300) / 600
-	input[offset*6+1] = (float64(g.vy16) + 96) / 192
+	input[offset] = (float64(g.y16)/16 + 300) / 600
+	input[offset+1] = (float64(g.vy16) + 96) / 192
+	input[offset+2] = 1
 
 	return g.jumper.Jump(input)
 }

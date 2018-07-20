@@ -22,6 +22,7 @@ func (e *Evo) StoreBest(pop evo.Population) error {
 	best := genomes[len(genomes)-1]
 
 	log.Printf("storing: %s", best.Decoded.String())
+	log.Printf("generation %d, id %d, species %d, fitness %f, solved %t, complexity %d\n", pop.Generation, best.ID, best.Species, best.Fitness, best.Solved, best.Complexity())
 
 	return e.Client.Update(PhenomeBucket, itob(uint64(best.ID)), best)
 }

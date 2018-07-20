@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
-	"math"
 
 	"github.com/klokare/evo"
 	"gonum.org/v1/gonum/mat"
@@ -12,21 +11,41 @@ import (
 
 // Evaluator runs the flappy experiment
 type Evaluator struct {
-	Jumper  chan Jumper
-	Fitness chan int
+	Task       chan Task
+	Population chan evo.Population
 }
 
 // Evaluate the flappy experiment with this phenome
 func (e Evaluator) Evaluate(p evo.Phenome) (r evo.Result, err error) {
-	e.Jumper <- &evoJumper{p}
+	t := Task{
+		ID:      p.ID,
+		Jumper:  &evoJumper{p},
+		Fitness: make(chan float64),
+	}
+	e.Task <- t
 
-	f := <-e.Fitness
+	f := <-t.Fitness
 
 	return evo.Result{
 		ID:      p.ID,
-		Fitness: float64(f),
-		Solved:  f > 100000,
+		Fitness: f * f,
+		Solved:  int(f) > 1000*solutionThreshold,
 	}, nil
+}
+
+func (e Evaluator) PreSearch(pop evo.Population) error {
+	go func() { e.Population <- pop }()
+	return nil
+}
+
+func (e Evaluator) PostSearch(pop evo.Population) error {
+	return nil
+}
+
+type Task struct {
+	ID      int64
+	Jumper  Jumper
+	Fitness chan float64
 }
 
 type evoJumper struct {
@@ -100,7 +119,7 @@ func (e TrainEvaluator) Evaluate(p evo.Phenome) (r evo.Result, err error) {
 
 	return evo.Result{
 		ID:      p.ID,
-		Fitness: math.Pow(float64(oks), 2),
+		Fitness: float64(oks * oks),
 		Solved:  solved,
 	}, nil
 }

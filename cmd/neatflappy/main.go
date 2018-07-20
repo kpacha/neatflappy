@@ -31,16 +31,6 @@ func main() {
 	)
 	flag.Parse()
 
-	client, err := bolt.New()
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer client.Close()
-
-	boltWatcher := bolt.Evo{client}
-
-	g := neatflappy.NewGame(*speedFactor)
-
 	src, err := source.NewJSONFromFile(*cpath)
 	if err != nil {
 		log.Fatalf("%+v\n", err)
@@ -51,9 +41,27 @@ func main() {
 		src,                  // Lastly, consult the configuration file
 	})}
 	exp := neat.NewExperiment(cfg)
+	exp.Searcher = neatflappy.Searcher{}
+
+	client, err := bolt.New()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer client.Close()
+
+	boltWatcher := bolt.Evo{Client: client}
+
+	g := neatflappy.NewGame(*speedFactor, *iter, exp.Populator.PopulationSize)
+
+	evaluator := neatflappy.Evaluator{
+		Task:       g.Task,
+		Population: g.NextPopulation,
+	}
+
 	exp.AddSubscription(evo.Subscription{Event: evo.Completed, Callback: example.ShowBest})
-	exp.AddSubscription(evo.Subscription{Event: evo.Evaluated, Callback: example.ShowBest})
 	exp.AddSubscription(evo.Subscription{Event: evo.Evaluated, Callback: boltWatcher.StoreBest})
+	exp.AddSubscription(evo.Subscription{Event: evo.Decoded, Callback: evaluator.PreSearch})
+	// exp.AddSubscription(evo.Subscription{Event: evo.Evaluated, Callback: evaluator.PostSearch})
 	// Run the experiment for a set number of iterations
 	ctx, fn, cb := evo.WithIterations(context.Background(), *iter)
 	defer fn() // ensure the context cancels
@@ -63,11 +71,6 @@ func main() {
 	ctx, fn, cb = evo.WithSolution(ctx)
 	defer fn() // ensure the context cancels
 	exp.AddSubscription(evo.Subscription{Event: evo.Evaluated, Callback: cb})
-
-	evaluator := neatflappy.Evaluator{
-		Jumper:  g.Jumper,
-		Fitness: g.Fitness,
-	}
 
 	go func() {
 		// Execute the experiment
@@ -82,6 +85,7 @@ func main() {
 		ebiten.SetFullscreen(true)
 	}
 	ebiten.SetRunnableInBackground(true)
+	ebiten.SetMaxTPS(60 * *speedFactor / 100)
 	if err := ebiten.Run(g.Update(ctx), neatflappy.ScreenWidth, neatflappy.ScreenHeight, 1, "Flappy Gopher (NEAT edition)"); err != nil {
 		panic(err)
 	}

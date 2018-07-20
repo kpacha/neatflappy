@@ -9,9 +9,9 @@ import (
 	_ "image/png"
 	"log"
 	"math"
-	"math/rand"
 
 	"github.com/golang/freetype/truetype"
+	"github.com/klokare/evo"
 	"golang.org/x/image/font"
 
 	"github.com/hajimehoshi/ebiten"
@@ -39,15 +39,16 @@ func floorMod(x, y int) int {
 }
 
 const (
-	ScreenWidth      = 640
-	ScreenHeight     = 480
-	tileSize         = 32
-	fontSize         = 32
-	smallFontSize    = fontSize / 2
-	pipeWidth        = tileSize * 2
-	pipeStartOffsetX = 8
-	pipeIntervalX    = 8
-	pipeGapY         = 5
+	ScreenWidth       = 640
+	ScreenHeight      = 480
+	tileSize          = 32
+	fontSize          = 32
+	smallFontSize     = fontSize / 2
+	pipeWidth         = tileSize * 2
+	pipeStartOffsetX  = 8
+	pipeIntervalX     = 8
+	pipeGapY          = 5
+	solutionThreshold = 10000
 )
 
 var (
@@ -128,41 +129,67 @@ const (
 type Game struct {
 	mode Mode
 
-	Gopher *Gopher
+	Gopher []*Gopher
 
 	// Camera
 	cameraX int
 	cameraY int
 
-	// Pipes
-	pipeTileYs []int
+	Task chan Task
 
-	Jumper  chan Jumper
-	Fitness chan int
+	NextPopulation chan evo.Population
+	Population     *evo.Population
 
-	iteration int
+	level Level
+
+	iteration      int
+	maxRuns        int
+	populationSize int
 
 	speedFactor int
 }
 
-func NewGame(speedFactor int) *Game {
+func NewGame(speedFactor, runs, populationSize int) *Game {
 	g := &Game{
-		Gopher:      &Gopher{},
-		Jumper:      make(chan Jumper),
-		Fitness:     make(chan int),
-		speedFactor: speedFactor,
+		Gopher:         make([]*Gopher, populationSize),
+		Task:           make(chan Task, populationSize),
+		NextPopulation: make(chan evo.Population, 1),
+		speedFactor:    speedFactor,
+		level:          Level1(0),
+		maxRuns:        runs,
+		populationSize: populationSize,
 	}
 	g.init()
+	log.Printf("Game created with %d max runs and a population size of %d", runs, populationSize)
 	return g
 }
 
 func (g *Game) init() {
-	g.Gopher.init()
 	g.cameraX = -240
 	g.cameraY = 0
-	g.pipeTileYs = make([]int, 256)
-	for i := range g.pipeTileYs {
-		g.pipeTileYs[i] = rand.Intn(6) + 2
+
+	l := (g.iteration / g.populationSize) + 1
+	if l < level2 {
+		g.level = Level1(l)
+		// } else if l < level3 {
+		// 	g.level = Level2(l)
+		// } else if l < level4 {
+		// 	g.level = Level3(l)
+		// } else if l < level5 {
+		// 	if g.iteration%g.populationSize == 0 {
+		// 		initPipeTileYs()
+		// 	}
+		// 	g.level = Level4(l)
+		// } else if l < level6 {
+		// 	if g.iteration%g.populationSize == 0 {
+		// 		initPipeTileYs()
+		// 	}
+		// 	g.level = Level5(l)
+	} else {
+		if (g.iteration/g.populationSize)%20 == 0 {
+			initPipeTileYs()
+		}
+		g.level = Level6(l)
 	}
 }
 
@@ -179,39 +206,104 @@ func jump() bool {
 	return false
 }
 
+func (g *Game) initGopher(task Task) {
+	if g.Gopher[g.iteration%g.populationSize] == nil {
+		g.Gopher[g.iteration%g.populationSize] = NewGopher()
+	}
+	g.Gopher[g.iteration%g.populationSize].init()
+	g.Gopher[g.iteration%g.populationSize].jumper = task.Jumper
+	g.Gopher[g.iteration%g.populationSize].fitness = task.Fitness
+	g.Gopher[g.iteration%g.populationSize].Name = fmt.Sprintf("gopher-%d", g.iteration)
+}
+
+func (g *Game) ModeSetup(ctx context.Context, screen *ebiten.Image) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case pop := <-g.NextPopulation:
+		g.Population = &pop
+	case task := <-g.Task:
+		g.initGopher(task)
+		g.iteration++
+		if g.iteration%g.populationSize == 0 {
+			g.mode = ModeGame
+			return nil
+		}
+	default:
+	}
+	return nil
+}
+
+func (g *Game) ModeGameOver(ctx context.Context, screen *ebiten.Image) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case pop := <-g.NextPopulation:
+		g.Population = &pop
+	default:
+	}
+	return nil
+}
+
+func (g *Game) changeModeToSetup() {
+	g.mode = ModeSetup
+	g.init()
+}
+
 func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 	return func(screen *ebiten.Image) error {
-		if inpututil.IsKeyJustPressed(ebiten.KeyUp) && g.speedFactor < 5000 {
-			g.speedFactor += 10 * g.speedFactor / 100
-		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyDown) && g.speedFactor > 50 {
-			g.speedFactor -= 10 * g.speedFactor / 100
-		}
+		g.checkSpeed()
+
+		score := 0
 		switch g.mode {
 		case ModeSetup:
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case g.Gopher.jumper = <-g.Jumper:
-				g.init()
-				g.mode++
-				g.iteration++
-				g.Gopher.Name = fmt.Sprintf("gopher-%d", g.iteration)
+			if err := g.ModeSetup(ctx, screen); err != nil {
+				return err
+			}
+		case ModeGameOver:
+			log.Println("game over!")
+			if err := g.ModeGameOver(ctx, screen); err != nil {
+				return err
 			}
 
 		case ModeGame:
-			if g.update() {
+			totalDeads := 0
+			bestFitness := 0
+			g.cameraX += 2
+			_, successed := g.pipeAt(g.cameraX - 2)
+			successed = successed && (g.cameraX > pipeStartOffsetX) && (floorMod(g.cameraX-pipeStartOffsetX, pipeIntervalX) < 2)
+			for _, gopher := range g.Gopher {
+				if gopher.isDead {
+					totalDeads++
+					continue
+				}
+				g.update(gopher)
+				dead := g.hit(gopher)
+				// if dead {
 				// hitPlayer.Rewind()
 				// hitPlayer.Play()
-				f := g.Gopher.score()
-				g.Fitness <- f
-				if f > 1000 {
-					g.mode = ModeGameOver
-				} else {
-					g.mode = ModeSetup
+				// }
+				f := gopher.score()
+				fInt := int(f)
+				if fInt > g.level.ExitScore() || dead {
+					gopher.fitness <- f
+					gopher.isDead = true
+				}
+				if fInt > bestFitness {
+					bestFitness = fInt
+					score = fInt
+				}
+				if successed {
+					gopher.successes++
 				}
 			}
-		case ModeGameOver:
+			if totalDeads == g.populationSize {
+				if bestFitness > 100*solutionThreshold {
+					g.mode = ModeGameOver
+				} else {
+					g.changeModeToSetup()
+				}
+			}
 		}
 
 		if ebiten.IsDrawingSkipped() {
@@ -221,10 +313,20 @@ func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 		screen.Fill(color.RGBA{0x80, 0xa0, 0xc0, 0xff})
 		g.drawTiles(screen)
 
-		g.drawGopher(screen)
+		if g.mode != ModeSetup {
+			g.drawGopher(screen)
+		}
+
+		if g.Population != nil {
+			g.drawPopulation(screen)
+		}
 
 		var texts []string
 		switch g.mode {
+		case ModeSetup:
+			generation := fmt.Sprintf("GENERATION #%d", 1+g.iteration/g.populationSize)
+			status := fmt.Sprintf("%d/%d", g.iteration%g.populationSize, g.populationSize)
+			texts = []string{"BUILDING", generation, "", status, "", "WAIT FOR IT..."}
 		case ModeGameOver:
 			texts = []string{"", "GAMEOVER!"}
 		}
@@ -233,53 +335,56 @@ func (g *Game) Update(ctx context.Context) func(*ebiten.Image) error {
 			text.Draw(screen, l, arcadeFont, x, (i+4)*fontSize, color.White)
 		}
 
-		scoreStr := fmt.Sprintf("%04d", g.Gopher.score())
+		scoreStr := fmt.Sprintf("%04d", score)
 		text.Draw(screen, scoreStr, arcadeFont, ScreenWidth-len(scoreStr)*fontSize, fontSize, color.White)
 		ebitenutil.DebugPrint(
 			screen,
-			fmt.Sprintf("Speed: %d%%. FPS: %0.2f. Gopher: %s", g.speedFactor, ebiten.CurrentFPS(), g.Gopher.Name),
+			fmt.Sprintf(
+				"Speed: %d%%. FPS: %0.2f. %s [%d]",
+				g.speedFactor, ebiten.CurrentFPS(), g.level.String(), g.populationSize),
 		)
 		return nil
 	}
 }
 
-func (g *Game) update() bool {
-	shloudJump := g.Gopher.jump(g.scan())
-	g.Gopher.x16 += 32 * g.speedFactor / 100
-	g.cameraX += 2 * g.speedFactor / 100
+func (g *Game) checkSpeed() {
+	for k, v := range speedKeys {
+		if inpututil.IsKeyJustPressed(k) {
+			g.speedFactor = v
+			ebiten.SetMaxTPS(60 * g.speedFactor / 100)
+			return
+		}
+	}
+}
+
+func (g *Game) update(gopher *Gopher) {
+	shloudJump := gopher.jump(g.scan(gopher))
+	gopher.x16 += 32
 	if shloudJump {
-		g.Gopher.vy16 = -96
+		gopher.jumps++
+		gopher.vy16 = -96
 		// jumpPlayer.Rewind()
 		// jumpPlayer.Play()
 	}
-	g.Gopher.y16 += (g.Gopher.vy16 + 2*g.speedFactor/100) * g.speedFactor / 100
+	gopher.y16 += gopher.vy16 + 2
 
 	// Gravity
-	g.Gopher.vy16 += 4 * g.speedFactor / 100
-	if g.Gopher.vy16 > 96 {
-		g.Gopher.vy16 = 96
+	gopher.vy16 += 4
+	if gopher.vy16 > 96 {
+		gopher.vy16 = 96
 	}
-
-	return g.hit()
 }
 
 func (g *Game) pipeAt(tileX int) (tileY int, ok bool) {
-	if (tileX - pipeStartOffsetX) <= 0 {
-		return 0, false
-	}
-	if floorMod(tileX-pipeStartOffsetX, pipeIntervalX) != 0 {
-		return 0, false
-	}
-	idx := floorDiv(tileX-pipeStartOffsetX, pipeIntervalX)
-	return g.pipeTileYs[idx%len(g.pipeTileYs)], true
+	return g.level.PipeAt(tileX)
 }
 
-func (g *Game) scan() []int {
+func (g *Game) scan(gopher *Gopher) []int {
 	w, h := gopherImage.Size()
-	x0 := floorDiv(g.Gopher.x16, 16) + (w-gopherWidth)/2
-	y0 := floorDiv(g.Gopher.y16, 16) + (h-gopherHeight)/2
+	x0 := floorDiv(gopher.x16, 16) + (w-gopherWidth)/2
+	y0 := floorDiv(gopher.y16, 16) + (h-gopherHeight)/2
 	y1 := y0 + gopherHeight
-	res := []int{}
+	res := []int{8, 0, 8, 0}
 	if y0 < -tileSize*4 {
 		return res
 	}
@@ -289,20 +394,24 @@ func (g *Game) scan() []int {
 	xMin := floorDiv(x0-pipeWidth, tileSize)
 
 	for x := xMin; x < xMin+14; x++ {
-		y, _ := g.pipeAt(x)
-		res = append(res, y)
+		if y, ok := g.pipeAt(x); ok {
+			res = append(res, x-xMin-7, y)
+		}
 	}
-	return res
+	if len(res) == 4 {
+		return res
+	}
+	return res[len(res)-4:]
 }
 
-func (g *Game) hit() bool {
+func (g *Game) hit(gopher *Gopher) bool {
 	if g.mode != ModeGame {
 		return false
 	}
 
 	w, h := gopherImage.Size()
-	x0 := floorDiv(g.Gopher.x16, 16) + (w-gopherWidth)/2
-	y0 := floorDiv(g.Gopher.y16, 16) + (h-gopherHeight)/2
+	x0 := floorDiv(gopher.x16, 16) + (w-gopherWidth)/2
+	y0 := floorDiv(gopher.y16, 16) + (h-gopherHeight)/2
 	x1 := x0 + gopherWidth
 	y1 := y0 + gopherHeight
 	if y0 < -tileSize*4 {
@@ -388,12 +497,48 @@ func (g *Game) drawTiles(screen *ebiten.Image) {
 }
 
 func (g *Game) drawGopher(screen *ebiten.Image) {
-	op := &ebiten.DrawImageOptions{}
-	w, h := gopherImage.Size()
-	op.GeoM.Translate(-float64(w)/2.0, -float64(h)/2.0)
-	op.GeoM.Rotate(float64(g.Gopher.vy16) / 96.0 * math.Pi / 6)
-	op.GeoM.Translate(float64(w)/2.0, float64(h)/2.0)
-	op.GeoM.Translate(float64(g.Gopher.x16/16.0)-float64(g.cameraX), float64(g.Gopher.y16/16.0)-float64(g.cameraY))
-	op.Filter = ebiten.FilterLinear
-	screen.DrawImage(gopherImage, op)
+	for _, gopher := range g.Gopher {
+		if gopher == nil || gopher.x16/16 < g.cameraX-3 {
+			continue
+		}
+		op := &ebiten.DrawImageOptions{}
+		w, h := gopherImage.Size()
+		op.GeoM.Translate(-float64(w)/2.0, -float64(h)/2.0)
+		op.GeoM.Rotate(float64(gopher.vy16) / 96.0 * math.Pi / 6)
+		op.GeoM.Translate(float64(w)/2.0, float64(h)/2.0)
+		op.GeoM.Translate(float64(gopher.x16/16.0)-float64(g.cameraX), float64(gopher.y16/16.0)-float64(g.cameraY))
+		if gopher.isDead {
+			op.ColorM.Translate(100, 0, 0, 0)
+		}
+		op.Filter = ebiten.FilterLinear
+		screen.DrawImage(gopherImage, op)
+	}
+}
+
+func (g *Game) drawPopulation(screen *ebiten.Image) {
+	// op := &ebiten.DrawImageOptions{}
+	// w, h := gopherImage.Size()
+	// op.GeoM.Translate(-float64(w)/2.0, -float64(h)/2.0)
+	// op.GeoM.Rotate(float64(g.Gopher.vy16) / 96.0 * math.Pi / 6)
+	// op.GeoM.Translate(float64(w)/2.0, float64(h)/2.0)
+	// op.GeoM.Translate(float64(g.Gopher.x16/16.0)-float64(g.cameraX), float64(g.Gopher.y16/16.0)-float64(g.cameraY))
+	// op.Filter = ebiten.FilterLinear
+	// screen.DrawImage(gopherImage, op)
+
+	// for _, genome := range g.Population.Genomes {
+	// 	log.Printf("genome %d: %s", genome.ID, genome.Encoded.String())
+	// }
+}
+
+var speedKeys = map[ebiten.Key]int{
+	ebiten.KeyF1:  100,
+	ebiten.KeyF2:  200,
+	ebiten.KeyF3:  300,
+	ebiten.KeyF4:  400,
+	ebiten.KeyF5:  500,
+	ebiten.KeyF6:  600,
+	ebiten.KeyF7:  700,
+	ebiten.KeyF8:  800,
+	ebiten.KeyF9:  900,
+	ebiten.KeyF10: 1000,
 }

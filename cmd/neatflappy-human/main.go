@@ -17,7 +17,7 @@ func init() {
 }
 
 func main() {
-	g := neatflappy.NewGame(100)
+	g := neatflappy.NewGame(100, 1, 1)
 	if runtime.GOARCH == "js" {
 		ebiten.SetFullscreen(true)
 	}
@@ -32,8 +32,12 @@ func main() {
 	defer file.Close()
 
 	go func() {
-		g.Jumper <- neatflappy.InteractiveLogJumper{Out: file}
-		f := <-g.Fitness
+		task := neatflappy.Task{
+			Jumper:  neatflappy.InteractiveLogJumper{Out: file},
+			Fitness: make(chan float64),
+		}
+		g.Task <- task
+		f := <-task.Fitness
 		log.Println("fitness:", f)
 		time.Sleep(5 * time.Second)
 		cancel()
